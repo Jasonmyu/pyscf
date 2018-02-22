@@ -547,6 +547,17 @@ def get_SI(cell, Gv=None):
     SI = np.exp(-1j*np.dot(coords, Gv.T))
     return SI
 
+def get_SI_pw(cell, Gd):
+    
+    coords = cell.atom_coords()
+    coords = [[-10.26/8,-10.26/8,-10.26/8],[10.26/8,10.26/8,10.26/8]]
+    sf = np.zeros([len(Gd)],dtype='complex128') 
+  
+    SI = np.exp(-1j*np.dot(coords,Gd.T))
+
+    return SI
+
+
 def get_ewald_params(cell, precision=1e-8, gs=None):
     r'''Choose a reasonable value of Ewald 'eta' and 'cut' parameters.
 
@@ -1110,6 +1121,7 @@ class Cell(mole.Mole):
     get_Gv_weights = get_Gv_weights
 
     get_SI = get_SI
+    get_SI_pw = get_SI_pw
 
     ewald = ewald
     energy_nuc = ewald

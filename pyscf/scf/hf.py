@@ -20,6 +20,112 @@ from pyscf.scf import diis
 from pyscf.scf import _vhf
 from pyscf.scf import chkfile
 
+def kernel_pw(mf, conv_tol=1e-10, conv_tol_grad=None,
+           dump_chk=True, dm0=None, callback=None, conv_check=True, **kwargs):
+
+   import return_pp
+   mol = mf.mol
+
+   #Initial Density Guess which goes as 8/v
+   rhoin=mf.get_density_guess_pw(mol)
+
+   #store for DIIS and convergence threshold
+   rhoinstore=numpy.empty([0]+mf.pw_grid_params[2],dtype='float64')
+   rhooutstore=numpy.empty([0]+mf.pw_grid_params[2],dtype='float64')
+   drho2=1000.
+
+   #hard code nbands for now, will change after preliminary implementation
+   nbands=4
+
+   #Set up data structures for combined hartree and xc potential
+   #in addition to DIIS density mixing scheme
+   mss=5
+   alphamix=1.0
+   maxcyc=50
+
+   #Catch case where len(kpts)=1, i.e. for gamma point calculation
+   kpts = mf.kpt
+   if isinstance(kpts[0], list) is False:
+      kpts = [kpts]
+
+   #Begin main SCF loop
+   for i in range(maxcyc):
+      rhoout=mf.get_density_shell(mol)
+      iternum=i+1
+      print "beginning cycle ",i
+      for j in range(0,len(kpts)):
+
+         #If on first iteration, zero out Vxc and Vh contribution
+         vg = mf.get_veff(rhoin,i)
+
+         #Get core hamiltonian including t + pp (need to add pp still)
+         h1e = mf.get_hcore(j)
+         
+         #Build Fock Matrix
+         fock = mf.get_fock_no_pypseudo(j,vg,h1e)
+
+         #slice in correct pp to test
+         fock += return_pp.return_pp_func()      
+
+         #Diagonalize Fock matrix with scipy
+         eigval,eigvec=scipy.linalg.eigh(fock,lower=False,eigvals=(0,nbands-1))
+
+         #Generate new density
+         rhoout = mf.gen_dens(j, eigvec, kpts[j])
+
+         print 'density sample',rhoout[0][0]
+         print 'eigval sample',eigval*27.21138602
+
+         #To do: remove diis from scf kernel
+         v = mf.pw_grid_params[12]
+         grid_dim = mf.pw_grid_params[2]
+
+         #Calculate residual
+         res=rhoout-rhoin
+         drho2=numpy.sqrt(v)*numpy.sqrt(numpy.mean(res**2))
+
+         #RM-DIIS density mixing scheme
+         if iternum<=mss:
+            rhoinstore=numpy.concatenate((rhoinstore,numpy.expand_dims(rhoin,axis=0)))
+            rhooutstore=numpy.concatenate((rhooutstore,numpy.expand_dims(rhoout,axis=0)))
+         else:
+            rhoinstore[:mss-1,:,:,:]=rhoinstore[1:,:,:,:]
+            rhoinstore[mss-1,:,:,:]=rhoin
+            rhooutstore[:mss-1,:,:,:]=rhooutstore[1:,:,:,:]
+            rhooutstore[mss-1,:,:,:]=rhoout
+
+         DIISmatdim=numpy.amin([iternum,mss])
+
+         #set up A matrix
+         Amat=numpy.zeros((DIISmatdim,DIISmatdim),dtype='float64')
+         for cyc1 in range(DIISmatdim):
+            for cyc2 in range(DIISmatdim):
+               Amat[cyc1,cyc2]=(v/(grid_dim[0]*grid_dim[1]*grid_dim[2]))*numpy.sum(numpy.abs((rhooutstore[cyc1,:,:,:] - \
+               rhoinstore[cyc1,:,:,:])*(rhooutstore[cyc2,:,:,:]-rhoinstore[cyc2,:,:,:])))
+
+         alphamat=numpy.zeros(DIISmatdim,dtype='float64')
+
+         #solve for alpha coefficients
+         for cyc in range(DIISmatdim):
+            alphamat[cyc]=numpy.sum(1./Amat[:,cyc])/numpy.sum(1./Amat)
+
+         rhoinnew=0.
+         rhooutnew=0.
+
+         #get new density matrix from coefficients 
+         for cyc in range(DIISmatdim):
+            rhoinnew+=alphamat[cyc]*rhoinstore[cyc,:,:,:]
+            rhooutnew+=alphamat[cyc]*rhooutstore[cyc,:,:,:]
+         rhoin=alphamix*rhooutnew+(1-alphamix)*rhoinnew
+
+         if drho2<1e-6:
+            print 'converged'
+            #return eigval,eigvec
+            return eigval*27.21138602,eigvec
+         else:
+            print "this iteration did not converge"
+            print "residual: ",drho2
+
 
 def kernel(mf, conv_tol=1e-10, conv_tol_grad=None,
            dump_chk=True, dm0=None, callback=None, conv_check=True, **kwargs):
@@ -98,6 +204,7 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         dm = dm0
 
     h1e = mf.get_hcore(mol)
+
     s1e = mf.get_ovlp(mol)
 
     cond = lib.cond(s1e)
@@ -117,12 +224,16 @@ Keyword argument "init_dm" is replaced by "dm0"''')
 
     vhf = mf.get_veff(mol, dm)
     e_tot = mf.energy_tot(dm, h1e, vhf)
+    
     logger.info(mf, 'init E= %.15g', e_tot)
 
     if dump_chk:
         # Explicit overwrite the mol object in chkfile
         # Note in pbc.scf, mf.mol == mf.cell, cell is saved under key "mol"
         chkfile.save_mol(mol, mf.chkfile)
+
+    ########## PP TEST ##############
+    pptest = numpy.array(numpy.load('correct_pp.npy'),dtype='float64')
 
     scf_conv = False
     cycle = 0
@@ -131,20 +242,46 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         dm_last = dm
         last_hf_e = e_tot
 
-        fock = mf.get_fock(h1e, s1e, vhf, dm, cycle, mf_diis)
+        fock = mf.get_fock(h1e, s1e, vhf, dm, cycle, diis=False)
+        #fock+=pptest
+
+        #print 'pptest', numpy.linalg.norm(pptest)
+        #print 'h1e',numpy.linalg.norm(h1e)
+        #print 's1e',numpy.linalg.norm(s1e)
+        #print 'vhf',numpy.linalg.norm(vhf)
+        #print 'fock: ', numpy.linalg.norm(fock[0])
+        
         mo_energy, mo_coeff = mf.eig(fock, s1e)
+
         mo_occ = mf.get_occ(mo_energy, mo_coeff)
+
         dm = mf.make_rdm1(mo_coeff, mo_occ)
+
+        print 'iteration',cycle
+        print 'lowest eig',mo_energy[0][0:4]*27.21138602
+
+        '''
+        eigvec_test = numpy.load('step_two_test.npy')
+        eigvec_filled = numpy.zeros([1,169,169],dtype='float64')
+        eigvec_filled[0] = eigvec_test
+        dm = lib.tag_array(dm, mo_coeff=eigvec_filled, mo_occ=mo_occ)
+        '''
+
         # attach mo_coeff and mo_occ to dm to improve DFT get_veff efficiency
         dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
         vhf = mf.get_veff(mol, dm, dm_last, vhf)
-        e_tot = mf.energy_tot(dm, h1e, vhf)
 
-        fock = mf.get_fock(h1e, s1e, vhf, dm)  # = h1e + vhf, no DIIS
+        e_tot = mf.energy_tot(dm, h1e, vhf)
+        print 'e_tot',e_tot
+
+        fock = mf.get_fock(h1e, s1e, vhf, dm, diis=False)  # = h1e + vhf, no DIIS
+        #fock += pptest
         norm_gorb = numpy.linalg.norm(mf.get_grad(mo_coeff, mo_occ, fock))
+
         norm_ddm = numpy.linalg.norm(dm-dm_last)
         logger.info(mf, 'cycle= %d E= %.15g  delta_E= %4.3g  |g|= %4.3g  |ddm|= %4.3g',
                     cycle+1, e_tot, e_tot-last_hf_e, norm_gorb, norm_ddm)
+
 
         if (abs(e_tot-last_hf_e) < conv_tol and norm_gorb < conv_tol_grad):
             scf_conv = True
@@ -752,6 +889,7 @@ def get_grad(mo_coeff, mo_occ, fock_ao):
     viridx = ~occidx
     g = reduce(numpy.dot, (mo_coeff[:,viridx].T.conj(), fock_ao,
                            mo_coeff[:,occidx])) * 2
+    
     return g.ravel()
 
 

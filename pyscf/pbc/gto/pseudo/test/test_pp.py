@@ -223,6 +223,7 @@ He
 
         np.random.seed(1)
         k = np.random.random(3)
+        print k
         v0 = get_pp(cell, k)
         v1 = pseudo.get_pp(cell, k)
         self.assertAlmostEqual(np.linalg.norm(v0-v1), 0, 6)

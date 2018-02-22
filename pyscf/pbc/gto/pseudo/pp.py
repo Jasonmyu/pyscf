@@ -271,7 +271,7 @@ def get_pp(cell, kpt=np.zeros(3)):
                 tmp = np.einsum('ij,jmp->imp', hl, SPG_lm_aoG)
                 vppnl += np.einsum('imp,imq->pq', SPG_lm_aoG.conj(), tmp)
     vppnl *= (1./ngs**2)
-
+    
     if aoR.dtype == np.double:
         return vpploc.real + vppnl.real
     else:

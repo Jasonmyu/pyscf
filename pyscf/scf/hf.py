@@ -223,17 +223,15 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         mf_diis = None
 
     vhf = mf.get_veff(mol, dm)
+
     e_tot = mf.energy_tot(dm, h1e, vhf)
-    
+ 
     logger.info(mf, 'init E= %.15g', e_tot)
 
     if dump_chk:
         # Explicit overwrite the mol object in chkfile
         # Note in pbc.scf, mf.mol == mf.cell, cell is saved under key "mol"
         chkfile.save_mol(mol, mf.chkfile)
-
-    ########## PP TEST ##############
-    pptest = numpy.array(numpy.load('correct_pp.npy'),dtype='float64')
 
     scf_conv = False
     cycle = 0
@@ -243,7 +241,6 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         last_hf_e = e_tot
 
         fock = mf.get_fock(h1e, s1e, vhf, dm, cycle, diis=False)
-        #fock+=pptest
 
         #print 'pptest', numpy.linalg.norm(pptest)
         #print 'h1e',numpy.linalg.norm(h1e)
@@ -254,16 +251,13 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         mo_energy, mo_coeff = mf.eig(fock, s1e)
 
         mo_occ = mf.get_occ(mo_energy, mo_coeff)
-
         dm = mf.make_rdm1(mo_coeff, mo_occ)
 
         print 'iteration',cycle
-        print 'lowest eig',mo_energy[0][0:4]*27.21138602
+        for x in range(len(fock)):
+            print 'lowest eig, k=',x,' ',mo_energy[x][0:4]*27.21138602
 
         '''
-        eigvec_test = numpy.load('step_two_test.npy')
-        eigvec_filled = numpy.zeros([1,169,169],dtype='float64')
-        eigvec_filled[0] = eigvec_test
         dm = lib.tag_array(dm, mo_coeff=eigvec_filled, mo_occ=mo_occ)
         '''
 
@@ -275,13 +269,15 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         print 'e_tot',e_tot
 
         fock = mf.get_fock(h1e, s1e, vhf, dm, diis=False)  # = h1e + vhf, no DIIS
-        #fock += pptest
-        norm_gorb = numpy.linalg.norm(mf.get_grad(mo_coeff, mo_occ, fock))
 
-        norm_ddm = numpy.linalg.norm(dm-dm_last)
+        #ignore for now, will hack it to zero later
+        #norm_gorb = numpy.linalg.norm(mf.get_grad(mo_coeff, mo_occ, fock))
+        norm_gorb=0
+        #norm_ddm = numpy.linalg.norm(dm-dm_last)
+        norm_ddm = 0
+
         logger.info(mf, 'cycle= %d E= %.15g  delta_E= %4.3g  |g|= %4.3g  |ddm|= %4.3g',
                     cycle+1, e_tot, e_tot-last_hf_e, norm_gorb, norm_ddm)
-
 
         if (abs(e_tot-last_hf_e) < conv_tol and norm_gorb < conv_tol_grad):
             scf_conv = True
@@ -1264,7 +1260,7 @@ class SCF(lib.StreamObject):
         self.chkfile = self._chkfile.name
         self.conv_tol = 1e-9
         self.conv_tol_grad = None
-        self.max_cycle = 50
+        self.max_cycle = 100
         self.init_guess = 'minao'
         # To avoid diis pollution form previous run, self.diis should not be
         # initialized as DIIS instance here

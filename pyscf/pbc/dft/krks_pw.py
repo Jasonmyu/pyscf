@@ -12,7 +12,7 @@ See Also:
                            systems at a single k-point
 '''
 
-import pw_helper
+import kpw_helper
 import time
 import numpy as np
 from pyscf import lib
@@ -63,6 +63,8 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
     '''Coulomb + XC functional
     '''
 
+    import time
+
     #retrieve grids
     if cell is None: cell = self.cell
     if kpts is None: kpts = self.kpts
@@ -72,39 +74,57 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
     gridsize=len(self.pw_grid_params[7])
     v = self.pw_grid_params[12]
     indgk = self.pw_grid_params[10]
-    GH_ind = self.pw_grid_params[7]
     mill_Gd = self.pw_grid_params[11]
     grid_dim = self.pw_grid_params[2]
     Gd_ind = self.pw_grid_params[4]
     g2_cutoff=1e-8
     Gd2 = self.pw_grid_params[5]
+    npw = self.pw_grid_params[15]
 
-    if isinstance(kpts[0], list) is False:
+    if isinstance(kpts[0], (np.ndarray,np.generic)) is False:
         kpts = [kpts]
 
     #return zero matrix if on first iteration (i.e. no mocoeff yet)
     if hasattr(dm,'mo_coeff') is False:
-        veff = np.zeros([len(kpts),gridsize,gridsize])
-        veff = lib.tag_array(veff, ecoul=0, exc=0, vj=None, vk=None)
+        veff = []
+        for x in range(len(kpts)):
+            temp = np.zeros([npw[x],npw[x]])
+            temp = lib.tag_array(temp, ecoul=0, exc=0, vj=None, vk=None)
+            veff.append(temp)
         return veff
 
     #else generate density from mocoeff, [nkpts,[grid_dim]] for both this and last iteration
     else:
         eigvec = np.array(getattr(dm,'mo_coeff'))
-        nbands = np.count_nonzero(np.array(getattr(dm,'mo_occ')))
-        rho_tot=np.zeros([len(kpts),grid_dim[0],grid_dim[0],grid_dim[0]],dtype='float64')
-        rho_add=np.zeros(grid_dim,dtype='float64')
+        #nbands = np.count_nonzero(np.array(getattr(dm,'mo_occ')))
+        #nbands = nbands/(len(kpts))**(1./3.)
+
         
-        for nk in range(0,len(kpts)):
-            rho_add=np.zeros(grid_dim,dtype='float64')
-            for pp in range(nbands):
+        mocc = getattr(dm,'mo_occ')
+        nbands=0
+        for x in range(len(mocc)):
+            for y in range(len(mocc[x])):
+               if mocc[x][y]!=0:
+                  nbands+=mocc[x][y]
+
+        nbands = nbands/(2*len(kpts))
+        
+
+        print nbands
+
+        #error_avoid = np.zeros(15)
+        rhotot=np.empty(grid_dim,dtype='float64')
+        rho_tot = np.zeros(grid_dim,dtype='float64')
+
+        for nk in range(len(kpts)):
+            for pp in range(4):
                 aux=np.zeros(grid_dim,dtype='complex128')
-                for tt in range(0, len(GH_ind)):
+                for tt in range(npw[nk]):
                     ik=indgk[nk][tt]
-                    aux[get_mill(ik,mill_Gd,grid_dim)]=eigvec[nk,tt,pp]
+                    aux[get_mill(ik,mill_Gd,grid_dim)]=eigvec[nk][tt,pp]
                 aux=(1./np.sqrt(v))*np.fft.fftn(aux)
-                rho_add+=(2./len(kpts))*np.absolute(aux)**2
-            rho_tot[nk]=rho_add
+                rho_tot+=(2./len(kpts))*np.absolute(aux)**2.
+
 
     #Get vg=vxc+j vectorized
     vg=np.zeros(len(Gd_ind),dtype='float64')
@@ -116,11 +136,11 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
     e_xc_store = np.zeros([len(kpts)],dtype='float64')
 
     for x in range(0, len(kpts)):
-        vxc=get_vxc(rho_tot[x])
-        exc = get_exc(rho_tot[x])
+        vxc=get_vxc(rho_tot)
+        exc = get_exc(rho_tot)
         recip_vxc=np.fft.ifftn(vxc)
         recip_exc=np.fft.ifftn(exc)
-        temp_rhog=np.fft.ifftn(rho_tot[x])
+        temp_rhog=np.fft.ifftn(rho_tot)
 
         for ng in range(0,len(Gd_ind)):
             vg[ng]=np.real(recip_vxc[get_mill(ng, mill_Gd, grid_dim)])
@@ -135,17 +155,16 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
     
 
     #fill up [nao,nao] matrix with vg per kpt and return veff
-    fill = np.zeros((len(GH_ind),len(GH_ind)),dtype='complex128')
-    veff = np.zeros((len(kpts),len(GH_ind),len(GH_ind)),dtype='complex128')
+    veff = []
     for y in range(0, len(kpts)):
-        gkind=indgk[y,:len(GH_ind)]
-        for aa in range(0,len(GH_ind)):
+        fill = np.zeros((npw[y],npw[y]),dtype='complex128')
+        gkind=indgk[y,:npw[y]]
+        for aa in range(npw[y]):
             ik = indgk[y][aa]
             gdiff = mill_Gd[ik]-mill_Gd[gkind[aa:]]+np.array(gs)
             inds = indg[gdiff.T.tolist()]
             fill[aa,aa:]=vgstore[y][inds]
-        veff[y] = fill
-        fill = np.zeros((len(GH_ind), len(GH_ind)), dtype='complex128')
+        veff.append(fill)
 
     #calculate ecoul and exc
     for x in range(0,len(kpts)):
@@ -153,20 +172,22 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
        for y in range(len(v_excstore[x])):
            e_xc_store[x] += v_excstore[x][y]   
 
+
     #Temporarily tag veff with ecoul and exc to avoid error in total_energy comput for HF
     #Needs to be fixed with proper total energy computation later
-    veff = lib.tag_array(veff, ecoul=e_coul_store, exc=e_xc_store, vj=None, vk=None) 
+    veff = np.asarray(veff)
+    veff = lib.tag_array(veff, ecoul=e_coul_store[0], exc=e_xc_store[0], vj=None, vk=None) 
     return veff
 
 
 class KRKS(khf_pw.KSCF_PW):
     '''RKS class adapted for PBCs with k-point sampling.
     '''
-    def __init__(self, cell, kpts=np.zeros((1,3))):
+    def __init__(self, cell, h, b, v, kpts=np.zeros((1,3))):
         khf_pw.KSCF_PW.__init__(self, cell, kpts)
         self.xc = 'LDA,VWN'
          
-        self.pw_grid_params=pw_helper.return_grids()
+        self.pw_grid_params=kpw_helper.return_grids(cell,kpts,h,b,v)
 
         self.grids = gen_grid.UniformGrids(cell)
         self.small_rho_cutoff = 1e-7  # Use rho to filter grids
@@ -189,12 +210,31 @@ class KRKS(khf_pw.KSCF_PW):
         if vhf is None or getattr(vhf, 'ecoul', None) is None:
             vhf = self.get_veff(self.cell, dm_kpts)
 
+        #TO DO: Ask Qiming how kpt version of e_tot works
+        #for now return 0 to test get-veff
+        #return [0]
+  
+        if hasattr(dm_kpts,'mo_coeff') is False:
+            return[0] 
+
+        nbands = np.count_nonzero(np.array(getattr(dm_kpts,'mo_occ')))
+        eigvec = np.array(getattr(dm_kpts,'mo_coeff'))
+
         weight = 1./len(h1e_kpts)
-        e1 = weight * np.einsum('kij,kji', h1e_kpts, dm_kpts).real
+        #e1 = weight * np.einsum('kij,kji', h1e_kpts, dm_kpts).real
+
+        e1 = 0
+      
+        for x in range(len(h1e_kpts)):  
+            for y in range(nbands):
+                for m1 in range(len(eigvec[x][y])):
+                    for m2 in range(len(eigvec[x][y])):
+                        e1+=(weight*2)*np.conj(eigvec[x][y,m1])*h1e_kpts[x][m1,m2]*eigvec[x][y,m2] 
+   
         tot_e = e1 + vhf.ecoul + vhf.exc
 
         print 'ecoul: ',vhf.ecoul
-        print 'vex: ',vhf.exc
+        print 'exc: ',vhf.exc
         print 'e1: ',e1
 
         logger.debug(self, 'E1 = %s  Ecoul = %s  Exc = %s', e1, vhf.ecoul, vhf.exc)

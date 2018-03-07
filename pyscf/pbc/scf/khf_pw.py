@@ -41,10 +41,10 @@ def get_ovlp(mf, cell=None, kpts=None):
     '''
     if cell is None: cell = mf.cell
     if kpts is None: kpts = mf.kpts
-    nao = len(mf.pw_grid_params[6])
-    s = np.zeros([len(kpts),nao,nao])
+    npw = mf.pw_grid_params[15]
+    s = []
     for x in range(0,len(kpts)):
-        s[x]=np.identity(nao)
+        s.append(np.identity(npw[x]))
 
     return s
 ####################################################################
@@ -77,16 +77,17 @@ def get_t(cell, k):
     GH = cell.pw_grid_params[6]
     Gd=cell.pw_grid_params[3]
     gridsize=len(cell.pw_grid_params[7])
-    temp_matrix = np.zeros([gridsize,gridsize])
-    t_matrix = np.zeros([len(k),gridsize,gridsize])
+    npw = cell.pw_grid_params[15]
+
+    t_matrix = []
    
-    for j in range(0,len(k)):
-       indices=indgk[j,:len(GH)]
-       gh=Gd[indices]+k[j]
-       gh2=np.einsum('ij,ij->i',GH,GH)/2.
+    for j in range(0,len(k[0])):
+       temp_matrix = np.zeros([npw[j],npw[j]])
+       indices=indgk[j,:npw[j]]
+       gh=Gd[indices]+k[0][j]
+       gh2=np.einsum('ij,ij->i',gh,gh)/2.
        np.fill_diagonal(temp_matrix,gh2)
-       t_matrix[j]=temp_matrix
-       temp_matrix = np.zeros([gridsize,gridsize])
+       t_matrix.append(temp_matrix)
        
     return t_matrix
 ####################################################################
@@ -142,7 +143,12 @@ def get_fock(mf, h1e_kpts, s_kpts, vhf_kpts, dm_kpts, cycle=-1, diis=None,
         damp_factor = mf.damp
         #damp_factor = 0
 
-    f_kpts = h1e_kpts + vhf_kpts
+    #f_kpts = h1e_kpts + vhf_kpts
+    f_kpts = []
+    for x in range(len(h1e_kpts)):
+        temp = h1e_kpts[x]+vhf_kpts[x]
+        f_kpts.append(temp)
+
     if diis and cycle >= diis_start_cycle:
         f_kpts = diis.update(s_kpts, dm_kpts, f_kpts, mf, h1e_kpts, vhf_kpts)
     if abs(level_shift_factor) > 1e-4:
@@ -400,11 +406,14 @@ class KSCF_PW(hf.RHF):
         #Modify code to give a poor guess of the correct dimension
         #according to [nao_pw,nao_pw]
         nkpts = len(self.kpts)
-        matrixdim = len(self.pw_grid_params[6])
-        hard_coded_guess = np.zeros([nkpts,matrixdim,matrixdim],dtype='float64')
-        number = float(self.mol.nelectron)/(matrixdim**2)
-        hard_coded_guess.fill(number)
-        return hard_coded_guess
+        npw = self.pw_grid_params[15]
+        dms=[]
+        for x in range(nkpts):
+             hard_coded_guess = np.zeros([npw[x],npw[x]],dtype='float64')
+             number = float(self.mol.nelectron)/(npw[x]**2)
+             hard_coded_guess.fill(number)
+             dms.append(hard_coded_guess)
+        return dms
 
         if cell is None:
             cell = self.cell
@@ -454,8 +463,12 @@ class KSCF_PW(hf.RHF):
 
         if cell is None: cell = self.cell
         if kpts is None: kpts = self.kpts
+      
+        t = get_t(self, kpts)
+
         if cell.pseudo:
 
+            npw = self.pw_grid_params[15]
             GH = self.pw_grid_params[6]
             indgk = self.pw_grid_params[10]
             Gv = self.pw_grid_params[1]
@@ -467,24 +480,27 @@ class KSCF_PW(hf.RHF):
             Gd_ind = self.pw_grid_params[4]
             indg = self.pw_grid_params[9]
 
-            nuc = np.zeros([len(kpts),len(GH),len(GH)],dtype='complex128')
-            temploc=np.zeros([len(GH),len(GH)],dtype='complex128')
+            #nuc = np.zeros([len(kpts),len(GH),len(GH)],dtype='complex128')
+            nuc = []
 
             #Assemble pseudopotential and construct locmatrix (nloc is already in matrix form)
             for x in range(len(kpts)):
-                gkind = indgk[x,:len(GH)]
-                loc,nloc = pp_pw.get_pp(cell, Gv, r, v, GH, gs, GH_ind, kpts[x])
-                for aa in range(len(GH)):
+                temploc = np.zeros([npw[x],npw[x]],dtype='complex128')
+                gkind = indgk[x,:npw[x]]
+                loc,nloc = pp_pw.get_pp(cell, Gv, r, v, GH[x], gs, GH_ind[x], kpts[x])
+                for aa in range(npw[x]):
                     ik = indgk[x][aa]
                     gdiff = mill_Gd[ik]-mill_Gd[gkind[aa:]]+np.array(gs)
                     inds = indg[gdiff.T.tolist()]
                     temploc[aa,aa:]=loc[Gd_ind[inds]]
                 #sum loc and nonloc pp and append to hcore
-                nuc[x]=temploc+nloc
-                temploc = np.zeros([len(GH),len(GH)],dtype="complex128")
-                    
-        t = get_t(self,kpts)
-        return nuc + t
+                nuc.append(temploc+np.triu(nloc))
+ 
+        hcore = []
+        for x in range(len(kpts)):
+             hcore.append(np.array(nuc[x])+np.array(t[x]))
+       
+        return hcore
 
     get_ovlp = get_ovlp
     get_fock = get_fock

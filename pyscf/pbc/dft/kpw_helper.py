@@ -21,7 +21,7 @@ def get_Gv(gs, b):
    return Gv,gxyz
 
 #Get three dimensional g-vectors corresponding to G^2 < 4(ECUT)
-def get_Gd(gv2,gv, ecut ,r):
+def get_Gd(gv2, gv, ecut, r):
    temp=[]
    temp_ind=[]
    temp2=[]
@@ -45,17 +45,34 @@ def create_mill_Gd(Gd_ind,r):
    return np.array(tempmill,dtype='int')
 
 #Get three dimensional g-vectors corresponding to G^2 < ECUT
-def get_GH(gv2, gv, ecut):
-   temp=[]
-   temp_ind=[]
+def get_GH(gv2, gv, ecut, k):
+   
+   npw=np.zeros(len(k),dtype='int')     
+
+   for x in range(len(k)):
+      for y in range(len(gv)):
+         kgtmp = gv[y]+k[x]
+         kgtmp2 = np.dot(kgtmp,kgtmp)
+         if kgtmp2/2. <= ecut:
+            npw[x]+=1
+
    #loop over number of column vectors containing grid points in Gd
-   for x in range(0, len(gv)):
-      if gv2[x]/2. < ecut:
-         temp.append(gv[x])
-         temp_ind.append(x)
-   GH = np.array(temp)
-   GH_ind = np.array(temp_ind)
-   return GH, GH_ind
+   
+   GH = []
+   GH_ind = []
+
+   for y in range(len(k)):
+      temp = []
+      temp_ind = []
+      for x in range(len(gv)):
+         kgtmp = gv[x]+k[y]
+         kgtmp2 = np.dot(kgtmp,kgtmp)
+         if kgtmp2/2. <= ecut:
+            temp.append(gv[x])
+            temp_ind.append(x)
+      GH.append(np.array(temp))
+      GH_ind.append(np.array(temp_ind))
+   return GH, GH_ind, npw
 
 #Get G squared
 def get_G2(G):
@@ -80,7 +97,7 @@ def get_mill(x1,mill_Gd,grid_dim):
    return index1,index2,index3
 
 
-def return_grids():
+def return_grids(cell,k,h,b,v):
    import call
    import math
    import numpy as np
@@ -89,9 +106,9 @@ def return_grids():
    import scipy
 
    gs = get_gs(7, 7, 7)
-   kpts=[1,1,1]
+   #kpts=[1,1,1]
    lc = 10.26
-   k,h,b,v,cell=call.get_pyscf_cell('Si','diamond',10.26,kpts)
+   #k,h,b,v,cell=call.get_pyscf_cell('Si','diamond',10.26,kpts)
    ke_cutoff = 150/27.21138602
    
    #Get a specified fraction of real space "gridpoints" and corresponding real space latice vectors
@@ -105,7 +122,7 @@ def return_grids():
    Gd2 = np.array(get_G2(Gd))
 
    #COARSE GRID
-   GH, GH_ind = get_GH(G2, Gv, ke_cutoff)
+   GH, GH_ind, npw = get_GH(G2, Gv, ke_cutoff, k)
    ngs=len(GH_ind)
 
    #STRUCTURE FACTOR
@@ -120,17 +137,17 @@ def return_grids():
 
    #indgk re-indexes Gd vectors fitting the ke_cutoff into a [1,169] list
    #the dimensions change depending on the number of kpts, so it is kept general for now
-   indgk=np.ones((1,len(GH)),dtype='int')*1000000
-   ind=0
+   indgk=np.ones((len(k),np.amax(npw)),dtype='int')*1000000
    for x0 in range(len(k)):
+      ind=0
       for x1 in range(len(Gd)):
          temp1=k[x0]+Gd[x1]
          temp2 = np.dot(temp1,temp1)
          if(temp2/2. <= ke_cutoff):
             indgk[x0][ind]=x1
             ind+=1
-   
-   return gs, Gv, grid_dim, Gd, Gd_ind, Gd2, GH, GH_ind, sf, indg, indgk, mill_Gd, v, rd, r
+
+   return gs, Gv, grid_dim, Gd, Gd_ind, Gd2, GH, GH_ind, sf, indg, indgk, mill_Gd, v, rd, r, npw
 
 
 if __name__=="__main__":
@@ -143,13 +160,19 @@ if __name__=="__main__":
    import pyscf.pbc.dft as pbcdft  
    from pyscf.scf import hf as scfhf 
 
-   k,h,b,v,cell=call.get_pyscf_cell('Si','diamond',10.26,[1,1,1])
+   #k,h,b,v,cell=call.get_pyscf_cell('Si','diamond',10.26,[1,1,1])
+   cell_atom = 'Si'
+   lattice = 'diamond'
+   l_constant = 10.26
+   kpts = [2,2,2]
 
-   mf = pbcdft.KRKS_PW(cell)
+   k,h,b,v,cell=call.get_pyscf_cell(cell_atom,lattice,l_constant, kpts)
+   
+
+   mf = pbcdft.KRKS_PW(cell,h,b,v,k)
    #print mf.pw_grid_params[0]
    #print mf.get_ovlp(cell,k)
    
-   k_test = [0,0,0]
   
    #print cell.get_SI().flatten()
    #print mf.pw_grid_params[0][8]
@@ -160,7 +183,7 @@ if __name__=="__main__":
   
 
    ####TEST PP PASSING IN CORRECT PARAMETERS#### 
-   #print pp_pw.get_pp(cell, mf.pw_grid_params[1],mf.pw_grid_params[14],mf.pw_grid_params[12], mf.pw_grid_params[6], mf.pw_grid_params[0],mf.pw_grid_params[7],k_test).real
+   #print pp_pw.get_pp(cell, mf.pw_grid_params[1],mf.pw_grid_params[14],mf.pw_grid_params[12], mf.pw_grid_params[6], mf.pw_grid_params[0],mf.pw_grid_params[7],[0,0,0]).real
    #quit()
 
    #print test_pp.get_pp(cell,k_test).shape

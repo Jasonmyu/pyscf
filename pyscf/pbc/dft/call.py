@@ -22,11 +22,12 @@ def get_pyscf_cell(atomtype,unittype,lc,kpts):
    cell.dimension=3
    cell.unit = 'B'
    cell.build()
-   k=cell.make_kpts(kpts,wrap_around=True)
+   cell.kpts=cell.make_kpts(kpts,wrap_around=True)
+   k = cell.kpts
    a=cell.a
    h=cell.reciprocal_vectors()
    omega=np.linalg.det(a)
-
+   
    return k,a,h,omega,cell
 
 

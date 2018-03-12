@@ -180,11 +180,12 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
 class KRKS(khf_pw.KSCF_PW):
     '''RKS class adapted for PBCs with k-point sampling.
     '''
-    def __init__(self, cell, h, b, v, kpts=np.zeros((1,3))):
-        khf_pw.KSCF_PW.__init__(self, cell, kpts)
+    #def __init__(self, cell, h, b, v, kpts=np.zeros((1,3))):
+    def __init__(self, cell, kpts=np.zeros((1,3))):
+        khf_pw.KSCF_PW.__init__(self, cell, cell.kpts)
         self.xc = 'LDA,VWN'
-         
-        self.pw_grid_params=kpw_helper.return_grids(cell,kpts,h,b,v)
+        
+        self.pw_grid_params=kpw_helper.return_grids(cell,cell.kpts,cell.a,cell.reciprocal_vectors(),cell.vol)
 
         self.grids = gen_grid.UniformGrids(cell)
         self.small_rho_cutoff = 1e-7  # Use rho to filter grids

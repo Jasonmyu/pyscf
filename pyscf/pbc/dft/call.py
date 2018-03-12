@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-def get_pyscf_cell(atomtype,unittype,lc,kpts):
+def get_pyscf_cell(atomtype,unittype,lc,ke_cutoff,kpts):
    import ase
    import pyscf.pbc.tools.pyscf_ase as pyscf_ase
    import numpy as np
@@ -17,18 +17,14 @@ def get_pyscf_cell(atomtype,unittype,lc,kpts):
 
    cell.a=ase_atom.cell
    cell.pseudo = {atomtype:'gth-pade'}
-   cell.ke_cutoff=150/27.21138602
+   cell.ke_cutoff=ke_cutoff/27.21138602
    cell.precision=1.e-8
    cell.dimension=3
    cell.unit = 'B'
    cell.build()
    cell.kpts=cell.make_kpts(kpts,wrap_around=True)
-   k = cell.kpts
-   a=cell.a
-   h=cell.reciprocal_vectors()
-   omega=np.linalg.det(a)
    
-   return k,a,h,omega,cell
+   return cell
 
 
 #if __name__=="__main__":

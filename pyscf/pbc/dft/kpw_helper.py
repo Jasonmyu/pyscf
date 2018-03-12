@@ -152,24 +152,23 @@ def return_grids(cell,k,h,b,v):
 
 if __name__=="__main__":
    np.set_printoptions(threshold='nan')
-   #gs, Gv, grid_dim, Gd, Gd_ind, Gd2, GH, GH_ind, sf, indg, indgk = return_grids()
-   #print grid_dim
    from pyscf.pbc.gto.pseudo import pp_pw
-   #from pyscf.pbc.gto.pseudo import test_pp
    from pyscf.pbc.gto.pseudo import pp
    import pyscf.pbc.dft as pbcdft  
    from pyscf.scf import hf as scfhf 
 
-   #k,h,b,v,cell=call.get_pyscf_cell('Si','diamond',10.26,[1,1,1])
    cell_atom = 'Si'
    lattice = 'diamond'
    l_constant = 10.26
    kpts = [2,2,2]
+   ke_cutoff = 150
 
-   k,h,b,v,cell=call.get_pyscf_cell(cell_atom,lattice,l_constant, kpts)
+   #Build cell with helper function that uses ase to find lattice cell
+   cell=call.get_pyscf_cell(cell_atom, lattice, l_constant, ke_cutoff, kpts)
    
 
-   mf = pbcdft.KRKS_PW(cell,h,b,v,k)
+   mf = pbcdft.KRKS_PW(cell)
+
    #print mf.pw_grid_params[0]
    #print mf.get_ovlp(cell,k)
    

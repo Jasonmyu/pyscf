@@ -109,9 +109,6 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
 
         nbands = nbands/(2*len(kpts))
         
-
-        print nbands
-
         #error_avoid = np.zeros(15)
         rhotot=np.empty(grid_dim,dtype='float64')
         rho_tot = np.zeros(grid_dim,dtype='float64')
@@ -210,14 +207,13 @@ class KRKS(khf_pw.KSCF_PW):
         if vhf is None or getattr(vhf, 'ecoul', None) is None:
             vhf = self.get_veff(self.cell, dm_kpts)
 
-        #TO DO: Ask Qiming how kpt version of e_tot works
-        #for now return 0 to test get-veff
-        #return [0]
-  
         if hasattr(dm_kpts,'mo_coeff') is False:
             return[0] 
 
-        nbands = np.count_nonzero(np.array(getattr(dm_kpts,'mo_occ')))
+        nbands = np.count_nonzero(np.array(getattr(dm_kpts,'mo_occ')))/2
+
+        print 'nbands',nbands   
+
         eigvec = np.array(getattr(dm_kpts,'mo_coeff'))
 
         weight = 1./len(h1e_kpts)
@@ -229,7 +225,7 @@ class KRKS(khf_pw.KSCF_PW):
             for y in range(nbands):
                 for m1 in range(len(eigvec[x][y])):
                     for m2 in range(len(eigvec[x][y])):
-                        e1+=(weight*2)*np.conj(eigvec[x][y,m1])*h1e_kpts[x][m1,m2]*eigvec[x][y,m2] 
+                        e1+=(weight**2)*np.conj(eigvec[x][y,m1])*h1e_kpts[x][m1,m2]*eigvec[x][y,m2] 
    
         tot_e = e1 + vhf.ecoul + vhf.exc
 

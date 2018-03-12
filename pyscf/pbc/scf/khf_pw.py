@@ -210,6 +210,11 @@ def get_grad(mo_coeff_kpts, mo_occ_kpts, fock):
     note that occ and virt indices of different k pts now occur
     in sequential patches of the 1D array
     '''
+    
+    #return 0 for plane waves, possibly resolve incompatibiltiy later
+    return 0
+    
+
     nkpts = len(mo_occ_kpts)
     grad_kpts = [hf.get_grad(mo_coeff_kpts[k], mo_occ_kpts[k], fock[k])
                  for k in range(nkpts)]
@@ -222,6 +227,9 @@ def make_rdm1(mo_coeff_kpts, mo_occ_kpts):
     Returns:
         dm_kpts : (nkpts, nao, nao) ndarray
     '''
+    #return 0 for plane waves, possibly resolve incompatibility later
+    return 0
+
     nkpts = len(mo_occ_kpts)
     dm_kpts = [hf.make_rdm1(mo_coeff_kpts[k], mo_occ_kpts[k])
                for k in range(nkpts)]
@@ -403,17 +411,9 @@ class KSCF_PW(hf.RHF):
         #    self.precompute_exx()
 
     def get_init_guess(self, cell=None, key='minao'):
-        #Modify code to give a poor guess of the correct dimension
-        #according to [nao_pw,nao_pw]
-        nkpts = len(self.kpts)
-        npw = self.pw_grid_params[15]
-        dms=[]
-        for x in range(nkpts):
-             hard_coded_guess = np.zeros([npw[x],npw[x]],dtype='float64')
-             number = float(self.mol.nelectron)/(npw[x]**2)
-             hard_coded_guess.fill(number)
-             dms.append(hard_coded_guess)
-        return dms
+
+        #return zero for plane waves, possibly fix incompatibility in the future
+        return 0
 
         if cell is None:
             cell = self.cell

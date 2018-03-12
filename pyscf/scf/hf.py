@@ -271,10 +271,8 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         fock = mf.get_fock(h1e, s1e, vhf, dm, diis=False)  # = h1e + vhf, no DIIS
 
         #ignore for now, will hack it to zero later
-        #norm_gorb = numpy.linalg.norm(mf.get_grad(mo_coeff, mo_occ, fock))
-        norm_gorb=0
-        #norm_ddm = numpy.linalg.norm(dm-dm_last)
-        norm_ddm = 0
+        norm_gorb = numpy.linalg.norm(mf.get_grad(mo_coeff, mo_occ, fock))
+        norm_ddm = numpy.linalg.norm(dm-dm_last)
 
         logger.info(mf, 'cycle= %d E= %.15g  delta_E= %4.3g  |g|= %4.3g  |ddm|= %4.3g',
                     cycle+1, e_tot, e_tot-last_hf_e, norm_gorb, norm_ddm)
@@ -361,6 +359,7 @@ def energy_tot(mf, dm=None, h1e=None, vhf=None):
     See :func:`scf.hf.energy_elec` for the electron part
     '''
     e_tot = mf.energy_elec(dm, h1e, vhf)[0] + mf.energy_nuc()
+    print 'ewald',mf.energy_nuc()
     return e_tot.real
 
 

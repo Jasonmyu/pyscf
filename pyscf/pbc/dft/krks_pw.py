@@ -30,7 +30,7 @@ def get_vxc(rho):
    return (-1.5)*xalpha*(3.*rho/np.pi)**(1./3.)
 
 def get_exc(rho):
-   return (-3./4.)*((3./np.pi)**(1./3.))*(rho**(4./3.))
+   return (-3./4.)*((3./np.pi)**(1./3.))*(rho**(1./3.))
 
 #Get Coulomb Potential via formula Vh = 4*Pi*rho(G)^2/G^2
 def get_vh(index,rhog,g2):
@@ -38,7 +38,7 @@ def get_vh(index,rhog,g2):
 
 def get_e_vh(index,rhog,g2,v):
    #e_vh = (2*np.pi/v)*rhog[index]*np.conjugate(rhog[index])/g2[index]
-   e_vh = (2*np.pi)*rhog[index]*np.conjugate(rhog[index])/g2[index] 
+   e_vh =v*(2*np.pi)*rhog[index]*np.conjugate(rhog[index])/g2[index]
 
    return np.sum(e_vh)
 
@@ -96,11 +96,9 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
     #else generate density from mocoeff, [nkpts,[grid_dim]] for both this and last iteration
     else:
         eigvec = np.array(getattr(dm,'mo_coeff'))
-        #nbands = np.count_nonzero(np.array(getattr(dm,'mo_occ')))
-        #nbands = nbands/(len(kpts))**(1./3.)
-
-        
         mocc = getattr(dm,'mo_occ')
+
+        #get number of bands
         nbands=0
         for x in range(len(mocc)):
             for y in range(len(mocc[x])):
@@ -108,8 +106,8 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
                   nbands+=mocc[x][y]
 
         nbands = nbands/(2*len(kpts))
-        
-        #error_avoid = np.zeros(15)
+       
+        #generate density 
         rhotot=np.empty(grid_dim,dtype='float64')
         rho_tot = np.zeros(grid_dim,dtype='float64')
 
@@ -167,7 +165,7 @@ def get_veff(self, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
     for x in range(0,len(kpts)):
        e_coul_store[x] = get_e_vh(largeind,rhog,Gd2,v)
        for y in range(len(v_excstore[x])):
-           e_xc_store[x] += v_excstore[x][y]   
+           e_xc_store[x] += v_excstore[x][y]*rhog[y]*v  
 
 
     #Temporarily tag veff with ecoul and exc to avoid error in total_energy comput for HF
@@ -203,6 +201,7 @@ class KRKS(khf_pw.KSCF_PW):
     get_veff = get_veff
 
     def energy_elec(self, dm_kpts=None, h1e_kpts=None, vhf=None):
+        import copy
         if h1e_kpts is None: h1e_kpts = self.get_hcore(self.cell, self.kpts)
         if dm_kpts is None: dm_kpts = self.make_rdm1()
         if vhf is None or getattr(vhf, 'ecoul', None) is None:
@@ -211,23 +210,44 @@ class KRKS(khf_pw.KSCF_PW):
         if hasattr(dm_kpts,'mo_coeff') is False:
             return[0] 
 
-        nbands = np.count_nonzero(np.array(getattr(dm_kpts,'mo_occ')))/2
+        kpts = self.kpts
+        #nbands = np.count_nonzero(np.array(getattr(dm_kpts,'mo_occ')))/2
+        mocc = getattr(dm_kpts,'mo_occ')
+        #get number of bands
+        nbands=0
+        for x in range(len(mocc)):
+            for y in range(len(mocc[x])):
+               if mocc[x][y]!=0:
+                  nbands+=mocc[x][y]
+
+        nbands = int(nbands/(2*len(kpts)))
 
         print 'nbands',nbands   
 
         eigvec = np.array(getattr(dm_kpts,'mo_coeff'))
 
+
         weight = 1./len(h1e_kpts)
         #e1 = weight * np.einsum('kij,kji', h1e_kpts, dm_kpts).real
 
-        e1 = 0
-      
+        e1 = 0.0
+        
+
+        for i in range(len(h1e_kpts)):
+            temp = h1e_kpts[i].diagonal()
+            h1e_kpts[i]=((h1e_kpts[i]+h1e_kpts[i].T))
+            np.fill_diagonal(h1e_kpts[i],temp) 
+        
         for x in range(len(h1e_kpts)):  
             for y in range(nbands):
                 for m1 in range(len(eigvec[x][y])):
                     for m2 in range(len(eigvec[x][y])):
-                        e1+=(weight**2)*np.conj(eigvec[x][y,m1])*h1e_kpts[x][m1,m2]*eigvec[x][y,m2] 
-   
+                        e1+=2*(weight)*np.conj(eigvec[x][m1,y])*h1e_kpts[x][m1,m2]*eigvec[x][m2,y] 
+ 
+        for i in range(len(h1e_kpts)):
+            h1e_kpts[i]=np.triu(h1e_kpts[i])
+ 
+
         tot_e = e1 + vhf.ecoul + vhf.exc
 
         print 'ecoul: ',vhf.ecoul

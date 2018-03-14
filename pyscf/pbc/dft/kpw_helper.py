@@ -109,7 +109,7 @@ def return_grids(cell,k,h,b,v):
    #kpts=[1,1,1]
    lc = 10.26
    #k,h,b,v,cell=call.get_pyscf_cell('Si','diamond',10.26,kpts)
-   ke_cutoff = 150/27.21138602
+   ke_cutoff = 136.05698066/27.21138602
    
    #Get a specified fraction of real space "gridpoints" and corresponding real space latice vectors
    Gv, r = get_Gv(gs, b)
@@ -160,8 +160,8 @@ if __name__=="__main__":
    cell_atom = 'Si'
    lattice = 'diamond'
    l_constant = 10.26
-   kpts = [2,2,2]
-   ke_cutoff = 150
+   kpts = [1,1,1]
+   ke_cutoff = 136.05698066
 
    #Build cell with helper function that uses ase to find lattice cell
    cell=call.get_pyscf_cell(cell_atom, lattice, l_constant, ke_cutoff, kpts)

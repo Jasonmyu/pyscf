@@ -550,6 +550,8 @@ def get_SI(cell, Gv=None):
 def get_SI_pw(cell, Gd):
     
     coords = cell.atom_coords()
+
+    #Testing for Silicon lattice
     coords = [[-10.26/8,-10.26/8,-10.26/8],[10.26/8,10.26/8,10.26/8]]
     sf = np.zeros([len(Gd)],dtype='complex128') 
   

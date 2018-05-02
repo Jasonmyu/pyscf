@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 #
-# Author: Timothy Berkelbach <tim.berkelbach@gmail.com>
+# Authors:
+# Timothy Berkelbach <tim.berkelbach@gmail.com>
+# Jason Yu <jyu5@caltech.edu>
 #
 
-'''PP with numeric integration.  See also pyscf/pbc/gto/pesudo/pp_int.py
+'''PP with numeric integration for use with full Plane Wave calculations.  See also pyscf/pbc/gto/pseudo/pp.py
 
 For GTH/HGH PPs, see:
     Goedecker, Teter, Hutter, PRB 54, 1703 (1996)
@@ -14,57 +16,6 @@ import numpy as np
 import scipy.linalg
 import scipy.special
 from pyscf import lib
-
-def get_pploc_gth_pw(cell, g2):
-   
-    v = scipy.linalg.det(cell.a) 
-    g2_cutoff=1e-8
-    rloc=[]
-    nexp=[]
-    cexp=[]
-    c=np.zeros([cell.natm,4],dtype='float64')
-
-    ##########TO DO: EXTEND TO MULTI-ATOM############
-    for ia in range(cell.natm-1):
-        symb=cell.atom_symbol(ia)
-        if symb not in cell._pseudo:
-            continue
-        Zion = cell.atom_charge(ia)
-        pseudop = cell._pseudo[symb]
-        rloc.append(pseudop[1])
-        nexp.append(pseudop[2])
-        cexp.append(pseudop[3])
-
-    for x in range(len(cexp)):
-        c_num=len(cexp[x])
-        for y in range(0,c_num):
-            c[x][y]=cexp[x][y]
-    
-    rloc=rloc[0]
-    nexp=nexp[0]
-    c1=c[0][0]
-    c2=c[0][1]
-    c3=c[0][2]
-    c4=c[0][3]             
-   
-    loc=np.zeros(len(g2),dtype='float64')
-    largeind=g2>g2_cutoff
-    smallind=g2<=g2_cutoff
-    g2=g2[largeind]
-    rloc2=rloc*rloc
-    rloc3=rloc*rloc2
-    gr2=g2*rloc2
-    gr4=gr2*gr2
-    gr6=gr2*gr4
-
-    loc_large=np.exp(-gr2/2.)*(-4.*np.pi*Zion/g2+np.sqrt(8.*np.pi**3.)*rloc3*(c1+c2*(3.-g2*rloc2)+c3*(15.-10.*gr2+gr4)+c4*(105.-105.*gr2+21.*gr4-gr6)))
-    loc_small=2.*np.pi*rloc2*((c1+3.*(c2+5.*(c3+7.*c4)))*np.sqrt(2.*np.pi)*rloc+Zion)
-    loc[largeind]=loc_large
-    loc[smallind]=loc_small
-
-    return loc/v
-
-
 
 def get_alphas(cell):
     '''alpha parameters from the non-divergent Hartree+Vloc G=0 term.
@@ -273,13 +224,6 @@ def get_pp(cell, Gd, rd, v, GH, gs, GH_ind, kpt=np.zeros(3)):
     from pyscf.pbc.dft import gen_grid
     from pyscf.pbc.dft import numint
 
-    #TO REVERT
-    #coords = gen_grid.gen_uniform_grids(cell)
-    #aoR = numint.eval_ao(cell, coords, kpt)
-    #nao = cell.nao_nr()
-    #SI = cell.get_SI()
-    #vlocG=pseudo.get_vlocG(cell)
-
     coords = rd
     aoR = numint.eval_ao_pw(cell,coords,kpt,Gd,v,GH, GH_ind)
     nao = len(GH)
@@ -298,13 +242,12 @@ def get_pp(cell, Gd, rd, v, GH, gs, GH_ind, kpt=np.zeros(3)):
     aokG = tools.fftk(np.asarray(aoR.T, order='C'),
                       gs, np.exp(-1j*np.dot(coords, kpt))).T
 
-    #TEST AOKG    
+    #Build aokG 
     aokG = numint.return_aokG_pw(cell,coords,kpt,Gd,v,GH,GH_ind)
 
     ngs = len(aokG)
 
     vppnl = np.zeros((nao,nao), dtype=np.complex128)
-    #hs, projGs = pseudo.get_projG(cell, kpt)
     hs, projGs = get_projG_pwgrid(cell, Gd, kpt)
 
     for ia, [h_ia,projG_ia] in enumerate(zip(hs,projGs)):
@@ -322,56 +265,7 @@ def get_pp(cell, Gd, rd, v, GH, gs, GH_ind, kpt=np.zeros(3)):
                                                    SPG_lm_aoG[i,:].conj(),
                                                    SPG_lm_aoG[j,:])
 
-    #print np.triu(vppnl)/v
-    #quit()   
-
     return vpplocG/v, vppnl/v
-
-
-    ''' DROPPING IN THE PREVIOUS TEST VERSION
-    fakemol = pyscf.gto.Mole()
-    fakemol._atm = np.zeros((1,pyscf.gto.ATM_SLOTS), dtype=np.int32)
-    fakemol._bas = np.zeros((1,pyscf.gto.BAS_SLOTS), dtype=np.int32)
-    ptr = pyscf.gto.PTR_ENV_START
-    fakemol._env = np.zeros(ptr+10)
-    fakemol._bas[0,pyscf.gto.NPRIM_OF ] = 1
-    fakemol._bas[0,pyscf.gto.NCTR_OF  ] = 1
-    fakemol._bas[0,pyscf.gto.PTR_EXP  ] = ptr+3
-    fakemol._bas[0,pyscf.gto.PTR_COEFF] = ptr+4
-    Gv = np.asarray(Gd+kpt)
-    G_rad = lib.norm(Gv, axis=1)
-
-    vppnl = np.zeros((nao,nao), dtype=np.complex128)
-    for ia in range(cell.natm):
-        symb = cell.atom_symbol(ia)
-        if symb not in cell._pseudo:
-            continue
-        pp = cell._pseudo[symb]
-        for l, proj in enumerate(pp[5:]):
-            rl, nl, hl = proj
-            if nl > 0:
-                hl = np.asarray(hl)
-                fakemol._bas[0,pyscf.gto.ANG_OF] = l
-                fakemol._env[ptr+3] = .5*rl**2
-                fakemol._env[ptr+4] = rl**(l+1.5)*np.pi**1.25
-                pYlm_part = pyscf.dft.numint.eval_ao(fakemol, Gv, deriv=0)
-
-                pYlm = np.empty((nl,l*2+1,ngs))
-                for k in range(nl):
-                    qkl = _qli(G_rad*rl, l, k)
-                    pYlm[k] = pYlm_part.T * qkl
-                # pYlm is real
-                SPG_lmi = np.einsum('g,nmg->nmg', SI[ia].conj(), pYlm)
-                SPG_lm_aoG = np.einsum('nmg,gp->nmp', SPG_lmi, aokG)
-                tmp = np.einsum('ij,jmp->imp', hl, SPG_lm_aoG)
-                vppnl += np.einsum('imp,imq->pq', SPG_lm_aoG.conj(), tmp)
-    vppnl *= (1./ngs**2)
-
-    if aoR.dtype == np.double:
-        return vpploc.real + vppnl.real
-    else:
-        return vpploc + vppnl
-    '''
 
 def get_jvloc_G0(cell, kpt=np.zeros(3)):
     '''Get the (separately divergent) Hartree + Vloc G=0 contribution.

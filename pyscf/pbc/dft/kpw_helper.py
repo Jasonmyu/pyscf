@@ -1,13 +1,17 @@
 #!/usr/bin/python
+'''
+Helper/wrapper for pw-dft implementation
+
+Authors: 
+Jason Yu <jyu5@caltech.edu>
+Narbe Maldrossian
+
+'''
+
 from pyscf import lib
 import call
 import numpy as np
 
-
-#put number of grid points into array   
-def get_gs(Nx, Ny, Nz):
-   gs = np.asarray([Nx, Ny, Nz])
-   return gs
 
 #Get three dimensional g-vectors. indicies go according to [0...Ni, -Ni...-1] to match FFT
 #Thus, the number of grid points go to 2*Ni+1, where Ni is the number of grid points
@@ -96,8 +100,7 @@ def get_mill(x1,mill_Gd,grid_dim):
 
    return index1,index2,index3
 
-
-def return_grids(cell,k,h,b,v):
+def return_grids(cell,k,h,b,v,ke_cutoff):
    import call
    import math
    import numpy as np
@@ -105,11 +108,8 @@ def return_grids(cell,k,h,b,v):
    import pyscf.gto.moleintor
    import scipy
 
-   gs = get_gs(7, 7, 7)
-   #kpts=[1,1,1]
-   lc = 10.26
-   #k,h,b,v,cell=call.get_pyscf_cell('Si','diamond',10.26,kpts)
-   ke_cutoff = 136.05698066/27.21138602
+   gs = cell.gs 
+   lc = np.cbrt(cell.vol)
    
    #Get a specified fraction of real space "gridpoints" and corresponding real space latice vectors
    Gv, r = get_Gv(gs, b)
@@ -162,37 +162,17 @@ if __name__=="__main__":
    l_constant = 10.26
    kpts = [1,1,1]
    ke_cutoff = 136.05698066
+   gsize = [7,7,7]
 
    #Build cell with helper function that uses ase to find lattice cell
-   cell=call.get_pyscf_cell(cell_atom, lattice, l_constant, ke_cutoff, kpts)
+   cell=call.get_pyscf_cell(cell_atom, lattice, l_constant, gsize, ke_cutoff, kpts)
    
-
    mf = pbcdft.KRKS_PW(cell)
-
-   #print mf.pw_grid_params[0]
-   #print mf.get_ovlp(cell,k)
-   
-  
-   #print cell.get_SI().flatten()
-   #print mf.pw_grid_params[0][8]
-   #print pp_pw.get_pploc_gth_pw(cell, mf.pw_grid_params[0][3])
-   #print len(mf.pw_grid_params)
-
-   #print pp_pw.get_pp(cell,mf.pw_grid_params[3],mf.pw_grid_params[13],mf.pw_grid_params[12], mf.pw_grid_params[6],mf.pw_grid_params[0], k_test).real 
-  
-
-   ####TEST PP PASSING IN CORRECT PARAMETERS#### 
-   #print pp_pw.get_pp(cell, mf.pw_grid_params[1],mf.pw_grid_params[14],mf.pw_grid_params[12], mf.pw_grid_params[6], mf.pw_grid_params[0],mf.pw_grid_params[7],[0,0,0]).real
-   #quit()
-
-   #print test_pp.get_pp(cell,k_test).shape
-   #print pp.get_pp(cell,k_test)
-
-   #print mf.kpt
+   mf.diis=False
 
    #########RUN KERNEL######################
-   scfhf.kernel(mf)
+   e = scfhf.kernel(mf)
+   print e[1]
 
-   #print rks_pw.get_veff(ks, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1, kpt=None, kpt_band=None)
                                                                                                            
 

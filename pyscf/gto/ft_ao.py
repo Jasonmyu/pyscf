@@ -178,3 +178,4 @@ if __name__ == '__main__':
     print(time.clock())
     print(numpy.linalg.norm(ft_ao(mol, Gv, None, b, gxyz, gs))-56.8273147065)
     print(time.clock())
+    print (ft_ao(mol,Gv,None,b,gxyz,gs)).shape

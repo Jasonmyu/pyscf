@@ -3,7 +3,7 @@
 # Authors: Garnet Chan <gkc1000@gmail.com>
 #          Timothy Berkelbach <tim.berkelbach@gmail.com>
 #          Qiming Sun <osirpt.sun@gmail.com>
-#
+#          Jason Yu <jyu5@caltech.edu>
 
 '''
 Hartree-Fock for periodic systems with k-point sampling
@@ -12,7 +12,6 @@ See Also:
     hf.py : Hartree-Fock for periodic systems at a single k-point
 '''
 
-import pw_helper
 import sys
 import time
 from functools import reduce
@@ -29,7 +28,6 @@ from pyscf.pbc.scf import chkfile
 from pyscf.pbc import tools
 from pyscf.pbc import df
 
-######################CHANGED#######################################
 def get_ovlp(mf, cell=None, kpts=None):
     '''Get the overlap AO matrices at sampled k-points.
 
@@ -347,7 +345,6 @@ class KSCF_PW(hf.RHF):
             cell.build()
         self.cell = cell
         hf.SCF.__init__(self, cell)
-        self.pw_grid_params=[pw_helper.return_grids()]
         self.with_df = df.FFTDF(cell)
         self.exxdiv = exxdiv
         self.kpts = kpts
@@ -472,7 +469,6 @@ class KSCF_PW(hf.RHF):
             GH = self.pw_grid_params[6]
             indgk = self.pw_grid_params[10]
             Gv = self.pw_grid_params[1]
-            v = self.pw_grid_params[12]
             r = self.pw_grid_params[14]
             gs = self.pw_grid_params[0]
             GH_ind = self.pw_grid_params[7]
@@ -480,14 +476,13 @@ class KSCF_PW(hf.RHF):
             Gd_ind = self.pw_grid_params[4]
             indg = self.pw_grid_params[9]
 
-            #nuc = np.zeros([len(kpts),len(GH),len(GH)],dtype='complex128')
             nuc = []
 
-            #Assemble pseudopotential and construct locmatrix (nloc is already in matrix form)
+            #Assemble pseudopotential and construct local pp in matrix form (nloc is already in matform)
             for x in range(len(kpts)):
                 temploc = np.zeros([npw[x],npw[x]],dtype='complex128')
                 gkind = indgk[x,:npw[x]]
-                loc,nloc = pp_pw.get_pp(cell, Gv, r, v, GH[x], gs, GH_ind[x], kpts[x])
+                loc,nloc = pp_pw.get_pp(cell, Gv, r, cell.vol, GH[x], gs, GH_ind[x], kpts[x])
                 for aa in range(npw[x]):
                     ik = indgk[x][aa]
                     gdiff = mill_Gd[ik]-mill_Gd[gkind[aa:]]+np.array(gs)
@@ -560,7 +555,6 @@ class KSCF_PW(hf.RHF):
         mo_coeff_kpts = []
 
         for k in range(nkpts):
-            #e, c = self._eigh(h_kpts[k], s_kpts[k])
             e, c = scipy.linalg.eigh(h_kpts[k], s_kpts[k],lower=False)
             eig_kpts.append(e)
             mo_coeff_kpts.append(c)

@@ -132,15 +132,11 @@ def eval_ao_pw(cell, coords, kpt, Gd, v, GH, GH_ind):
     ao_pw = numpy.zeros((len(coords),len(GH)),dtype='complex128')
     ao_list = numpy.zeros(len(GH), dtype='complex128')
 
-
     for x in range(len(coords)):
        for y in range(len(GH)):
           ao_list[y] = (1./numpy.sqrt(len(coords))**2)*numpy.exp(1j*numpy.dot(coords[x],kpt+GH[y]))
-          #ao_list[y] = numpy.exp(1j*numpy.dot(coords[x],kpt+GH[y]))
        ao_pw[x]=ao_list
        ao_list = numpy.zeros(len(GH), dtype='complex128')
-
-    #Not orthonormal?
 
     return ao_pw
       
@@ -154,9 +150,6 @@ def return_aokG_pw(cell,coords,kpt,Gd,v,GH,GH_ind):
       ao_list = numpy.zeros(len(coords), dtype='complex128')
    
    return ao_pw
-         
-
-
 
 def eval_rho(cell, ao, dm, non0tab=None, xctype='LDA', hermi=0, verbose=None):
     '''Collocate the *real* density (opt. gradients) on the real-space grid.

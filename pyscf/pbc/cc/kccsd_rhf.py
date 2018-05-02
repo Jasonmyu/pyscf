@@ -528,7 +528,8 @@ class RCCSD(pyscf.cc.ccsd.CCSD):
                 Hr1 += -2.*einsum('klid,kld->i',imds.Wooov[kk,kl,kshift],r2[kk,kl])
                 Hr1 +=     einsum('lkid,kld->i',imds.Wooov[kl,kk,kshift],r2[kk,kl])
 
-        Hr2 = np.zeros(r2.shape, dtype=t1.dtype)
+        Hr2 = np.zeros(r2.shape, dtype=Hr1.dtype)
+
         # 2h1p-1h block
         for ki in range(nkpts):
             for kj in range(nkpts):
@@ -770,7 +771,7 @@ class RCCSD(pyscf.cc.ccsd.CCSD):
 
         # Eq. (31)
         # 2p1h-1p block
-        Hr2 = np.zeros(r2.shape, dtype=t1.dtype)
+        Hr2 = np.zeros(r2.shape, dtype=Hr1.dtype)
         for kj in range(nkpts):
             for ka in range(nkpts):
                 kb = kconserv[kshift,ka,kj]
